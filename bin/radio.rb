@@ -42,6 +42,9 @@ if config[:http_proxy]
   RestClient.proxy = config[:http_proxy]
 end
 
+# The account id used for registering the device
+ACCOUNT_ID = ConfigHelper.load_config("config/account.yml")[:id]
+
 ## Radio
 class Radio
   STATE_FILE = ConfigHelper.base_path("var", "radio_state.json")
@@ -351,14 +354,12 @@ class Radio
     state[:pin] = prompt_enter_pin
     if state[:pin] == "0000"
       trace_header "Registering with web front end to get PIN"
-      # FIXME: Use stored account details
-
-      # curl -d registration_key=$registration_key -d account_id=$account_id http://localhost:4567/register
+      # You could also do this with curl, e.g.
+      #   curl -d registration_key=$registration_key -d account_id=$account_id http://localhost:4567/assoc
       response = @authority["/assoc"].post(
                                            {
                                              :registration_key => state[:registration_key],
-                                             # TODO: magic number 9 = account id for 'sean'
-                                             :id => 9
+                                             :id => ACCOUNT_ID
                                            }) { |response, request, reply| response }
       case response.code
       when 200..299
