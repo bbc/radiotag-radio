@@ -1,9 +1,18 @@
 #!/usr/bin/env ruby
 ## simulate a radio with RadioTag capabilities
 ## preamble
+# add require_relative
+unless Kernel.respond_to?(:require_relative)
+  module Kernel
+    def require_relative(path)
+      require File.join(File.dirname(caller[0]), path.to_str)
+    end
+  end
+end
+
 require 'rest_client'
-require './lib/config_helper'
-require './lib/this_method'
+require 'config_helper'
+require 'this_method'
 require 'json'
 require 'highline'
 require 'pp'
@@ -31,8 +40,8 @@ end
 
 ## config
 default_config = {
-  :auth_service => "http://radiotag.prototype0.net",
-  :tag_service  => "http://radiotag.prototype0.net",
+  :auth_service => "http://radiotag.prototyping.bbc.co.uk",
+  :tag_service  => "http://radiotag.prototyping.bbc.co.uk",
   :http_proxy   => ENV['http_proxy']
 }
 config = default_config.merge(ConfigHelper.load_config("config/config.yml"))
@@ -126,7 +135,7 @@ class Radio
       :time => time
     }
     headers = {
-      'X-radiotag-auth-token' => token
+      'X-RadioTAG-Auth-Token' => token
     }
     response = @resource["/tag"].post(params, headers) { |response, request, reply| response }
     update_grant(response)
@@ -187,7 +196,7 @@ class Radio
   end
 
   def tags
-    response = @resource["/tags"].get({ 'X-radiotag-auth-token' => state[:token] }) { |response, request, reply| response }
+    response = @resource["/tags"].get({ 'X-RadioTAG-Auth-Token' => state[:token] }) { |response, request, reply| response }
     case response.code
     when 200..299
       puts response.body
@@ -223,7 +232,7 @@ class Radio
                                              :registration_key => state[:registration_key],
                                              :pin => state[:pin],
                                            },
-                                           {  'X-radiotag-auth-token' => state[:token] }
+                                           {  'X-RadioTAG-Auth-Token' => state[:token] }
                                            )  { |response, request, reply| response }
     update_grant(response)
     case response.code
@@ -275,10 +284,20 @@ class Radio
     end
   end
 
+  def get_playback_result(method)
+    result = @record[method].shift
+    if result.nil?
+      err = "Unexpected nil in playback: #{method}"
+      puts "ERROR: #{err}"
+      raise RuntimeError, err
+    end
+    result
+  end
+
   def prompt_enter_pin(pin = "0000")
     if $APP_PLAYBACK
       trace_header "Entering PIN"
-      result = @record[this_method].shift
+      result = get_playback_result(this_method)
     else
       result = HighLine.new.ask("Enter PIN: ") { |q|
         q.default = pin if pin
@@ -293,13 +312,13 @@ class Radio
 
   def prompt_tune
     if $APP_PLAYBACK
-      result = @record[this_method].shift
+      result = get_playback_result(this_method)
       trace_header "Tuned radio to #{result}"
     else
       hl = HighLine.new
       result = hl.choose do |menu|
         menu.prompt = "Station: "
-        menu.choices(*STATIONS.keys)
+        menu.choices(*STATIONS.keys.sort)
       end
       if $APP_RECORD
         record(this_method, result)
@@ -310,7 +329,7 @@ class Radio
 
   def prompt_ok_register
     if $APP_PLAYBACK
-      result = @record[this_method].shift
+      result = get_playback_result(this_method)
       trace_header "Pressed #{result}"
     else
       hl = HighLine.new
@@ -331,7 +350,7 @@ class Radio
 
   def prompt_menu
     if $APP_PLAYBACK
-      result = @record[this_method].shift
+      result = get_playback_result(this_method)
       trace_header "Pressed #{result}"
     else
       hl = HighLine.new
@@ -432,7 +451,7 @@ class Radio
     when "register"
       get_registration_key
     else
-      puts "Error"
+      STDERR.puts "Error in #{this_method} - result = #{result.inspect}"
     end
   end
 
@@ -471,4 +490,3 @@ catch :cancel do
   end
   radio.run
 end
-
